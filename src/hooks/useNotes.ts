@@ -1,71 +1,76 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { addNote, updateNote, deleteNote, getNotes } from '../services/firebaseNote';
 import { Note } from '../types';
 
 export const useNotes = () => {
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: '1',
-      title: 'Ma première note',
-      content: 'Ceci est le contenu de ma première note. Je peux écrire tout ce que je veux ici et cela sera sauvegardé automatiquement.',
-      createdAt: new Date('2024-01-15'),
-      updatedAt: new Date('2024-01-15'),
-    },
-    {
-      id: '2',
-      title: 'Liste de courses',
-      content: 'Pain\nLait\nOeufs\nTomates\nFromage\nPâtes',
-      createdAt: new Date('2024-01-14'),
-      updatedAt: new Date('2024-01-16'),
-    },
-    {
-      id: '3',
-      title: 'Idées de projet',
-      content: 'Application de gestion de tâches\nSite web portfolio\nApplication de notes (en cours)\nBot Discord',
-      createdAt: new Date('2024-01-13'),
-      updatedAt: new Date('2024-01-17'),
-    },
-  ]);
+  const [notes, setNotes] = useState<Note[]>([]);
 
-  const addNote = useCallback((noteData: Partial<Note>) => {
-    const newNote: Note = {
-      id: Date.now().toString(),
-      title: noteData.title || 'Note sans titre',
-      content: noteData.content || '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+  // Charger les notes depuis Firestore
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const notesFromFirestore = await getNotes();
+        setNotes(notesFromFirestore);
+      } catch (error) {
+        console.error('Erreur lors du chargement des notes:', error);
+      }
     };
 
-    setNotes(prev => [newNote, ...prev]);
-    return newNote;
+    fetchNotes();
   }, []);
 
-  const updateNote = useCallback((id: string, noteData: Partial<Note>) => {
-    setNotes(prev => 
-      prev.map(note => 
-        note.id === id 
-          ? { 
-              ...note, 
-              ...noteData, 
-              updatedAt: new Date() 
-            } 
-          : note
-      )
-    );
-  }, []);
+  const addNewNote = async (noteData: Partial<Note>) => {
+    try {
+      const newNote = await addNote(noteData);
+      // Assure-toi que newNote a toutes les propriétés nécessaires
+      const noteToAdd: Note = {
+        id: newNote.id,
+        title: newNote.title || 'Note sans titre',
+        content: newNote.content || '',
+        createdAt: newNote.createdAt || new Date(),
+        updatedAt: newNote.updatedAt || new Date(),
+      };
+      setNotes((prevNotes) => [noteToAdd, ...prevNotes]);
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de la note:', error);
+    }
+  };
 
-  const deleteNote = useCallback((id: string) => {
-    setNotes(prev => prev.filter(note => note.id !== id));
-  }, []);
 
-  const getNoteById = useCallback((id: string) => {
-    return notes.find(note => note.id === id);
-  }, [notes]);
+  const updateExistingNote = async (id: string, noteData: Partial<Note>) => {
+    try {
+      await updateNote(id, noteData);
+      setNotes((prevNotes) =>
+        prevNotes.map((note) =>
+          note.id === id
+            ? {
+                ...note,
+                ...noteData,
+                // Assurer que `updatedAt` est toujours défini
+                updatedAt: new Date(),
+              }
+            : note
+        )
+      );
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de la note:', error);
+    }
+  };
+
+
+  const deleteExistingNote = async (id: string) => {
+    try {
+      await deleteNote(id);
+      setNotes((prevNotes) => prevNotes.filter((note) => note.id !== id));
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la note:', error);
+    }
+  };
 
   return {
     notes,
-    addNote,
-    updateNote,
-    deleteNote,
-    getNoteById,
+    addNote: addNewNote,
+    updateNote: updateExistingNote,
+    deleteNote: deleteExistingNote,
   };
 };
